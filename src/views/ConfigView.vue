@@ -116,10 +116,16 @@ const testConnection = async () => {
     // 使用Tauri API测试连接
     const result = await invoke('test_nas_connection', { url: form.nasUrl })
     console.log("连接测试结果:", result)
-    if (result) {
+    
+    if (result.success) {
       ElMessage.success('连接成功')
     } else {
-      ElMessage.error('连接失败')
+      // 检查是否使用了代理
+      if (result.has_proxy) {
+        ElMessage.error('连接失败，发现电脑正在使用代理，请关掉代理后重试')
+      } else {
+        ElMessage.error('连接失败，请检查NAS地址是否正确')
+      }
     }
   } catch (error) {
     console.error("连接测试失败:", error)
