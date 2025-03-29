@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>控制栏</title>
+  <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    
+    body {
+      background-color: #f5f7fa;
+      height: 100vh;
+      overflow: hidden;
+    }
+    
+    .control-bar {
+      display: flex;
+      align-items: center;
+      padding: 10px 15px;
+      background-color: #409eff;
+      color: white;
+      height: 100%;
+    }
+    
+    .control-bar-title {
+      font-size: 16px;
+      font-weight: bold;
+      margin-right: 20px;
+    }
+    
+    .control-bar-buttons {
+      display: flex;
+      gap: 10px;
+      flex: 1;
+    }
+    
+    .control-btn {
+      padding: 6px 12px;
+      border: none;
+      border-radius: 4px;
+      font-size: 14px;
+      cursor: pointer;
+      background-color: white;
+      color: #409eff;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      transition: all 0.3s;
+    }
+    
+    .control-btn:hover {
+      background-color: #ecf5ff;
+    }
+    
+    .control-btn-icon {
+      margin-right: 5px;
+    }
+    
+    .control-bar-status {
+      margin-left: auto;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="control-bar">
+    <div class="control-bar-title">NAS迅雷控制台</div>
+    <div class="control-bar-buttons">
+      <button id="open-folder-btn" class="control-btn">
+        <span class="control-btn-icon">📁</span>打开下载目录
+      </button>
+      <button id="refresh-btn" class="control-btn">
+        <span class="control-btn-icon">🔄</span>刷新页面
+      </button>
+      <button id="logout-btn" class="control-btn">
+        <span class="control-btn-icon">🔒</span>注销
+      </button>
+      <button id="config-btn" class="control-btn">
+        <span class="control-btn-icon">⚙️</span>配置
+      </button>
+    </div>
+    <div class="control-bar-status" id="status-text">已连接</div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // 获取按钮元素
+      const openFolderBtn = document.getElementById('open-folder-btn');
+      const refreshBtn = document.getElementById('refresh-btn');
+      const logoutBtn = document.getElementById('logout-btn');
+      const configBtn = document.getElementById('config-btn');
+      const statusText = document.getElementById('status-text');
+      
+      // 打开下载目录
+      openFolderBtn.addEventListener('click', () => {
+        if (window.electronAPI) {
+          // 获取配置中的下载目录路径
+          window.electronAPI.getConfig();
+          window.electronAPI.onConfigLoaded((config) => {
+            if (config.downloadPath) {
+              window.electronAPI.openFolder(config.downloadPath);
+              statusText.textContent = '正在打开下载目录...';
+              setTimeout(() => {
+                statusText.textContent = '已连接';
+              }, 2000);
+            } else {
+              statusText.textContent = '错误: 未配置下载目录';
+              setTimeout(() => {
+                statusText.textContent = '已连接';
+              }, 2000);
+            }
+          });
+        }
+      });
+      
+      // 刷新页面
+      refreshBtn.addEventListener('click', () => {
+        if (window.electronAPI) {
+          window.electronAPI.refreshNasPage();
+          statusText.textContent = '正在刷新页面...';
+          setTimeout(() => {
+            statusText.textContent = '已连接';
+          }, 2000);
+        }
+      });
+      
+      // 注销
+      logoutBtn.addEventListener('click', () => {
+        if (window.electronAPI) {
+          window.electronAPI.clearCookies();
+          statusText.textContent = '正在注销...';
+          setTimeout(() => {
+            statusText.textContent = '已连接';
+          }, 2000);
+        }
+      });
+      
+      // 打开配置页面
+      configBtn.addEventListener('click', () => {
+        if (window.electronAPI) {
+          window.electronAPI.showConfig();
+          statusText.textContent = '正在打开配置页面...';
+          setTimeout(() => {
+            statusText.textContent = '已连接';
+          }, 2000);
+        }
+      });
+      
+      // 监听下载链接处理
+      if (window.electronAPI) {
+        window.electronAPI.onDownloadUrlReceived((url) => {
+          statusText.textContent = `正在处理下载链接: ${url.substring(0, 20)}...`;
+          setTimeout(() => {
+            statusText.textContent = '已连接';
+          }, 3000);
+        });
+      }
+    });
+  </script>
+</body>
+</html>

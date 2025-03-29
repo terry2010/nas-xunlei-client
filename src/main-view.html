@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NAS迅雷客户端</title>
+  <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    
+    html, body {
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+    }
+    
+    #app {
+      height: 100vh;
+      width: 100vw;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .webview-container {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      width: 100%;
+    }
+    
+    #control-webview {
+      height: 60px;
+      width: 100%;
+      border: none;
+    }
+    
+    #nas-webview {
+      flex: 1;
+      width: 100%;
+      border: none;
+    }
+    
+    .loading-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(255, 255, 255, 0.8);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+    
+    .loading-spinner {
+      border: 5px solid #f3f3f3;
+      border-top: 5px solid #409eff;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      animation: spin 1s linear infinite;
+      margin-bottom: 20px;
+    }
+    
+    .loading-text {
+      font-size: 18px;
+      color: #409eff;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    .error-container {
+      padding: 20px;
+      text-align: center;
+      color: #f56c6c;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="webview-container">
+      <webview id="control-webview" src="control-bar.html" preload="../src-electron/preload.js"></webview>
+      <webview id="nas-webview" src="about:blank" preload="../src-electron/preload.js"></webview>
+    </div>
+    <div id="loading-overlay" class="loading-overlay">
+      <div class="loading-spinner"></div>
+      <div id="loading-text" class="loading-text">正在加载NAS页面...</div>
+    </div>
+  </div>
+
+  <script>
+    // 获取DOM元素
+    const controlWebview = document.getElementById('control-webview');
+    const nasWebview = document.getElementById('nas-webview');
+    const loadingOverlay = document.getElementById('loading-overlay');
+    const loadingText = document.getElementById('loading-text');
+    
+    // 加载NAS页面
+    function loadNasPage(url) {
+      if (!url) {
+        showError('NAS地址未配置，请先完成配置');
+        return;
+      }
+      
+      showLoading('正在加载NAS页面...');
+      
+      // 确保URL格式正确
+      try {
+        const parsedUrl = new URL(url);
+        nasWebview.src = url;
+      } catch (error) {
+        showError(`NAS地址格式错误: ${error.message}`);
+        console.error('URL格式错误:', error);
+      }
+    }
+    
+    // 显示加载状态
+    function showLoading(message) {
+      loadingText.textContent = message;
+      loadingText.style.color = '#409eff';
+      loadingOverlay.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
+      loadingOverlay.style.display = 'flex';
+    }
+    
+    // 隐藏加载状态
+    function hideLoading() {
+      loadingOverlay.style.display = 'none';
+    }
+    
+    // 显示错误信息
+    function showError(message) {
+      loadingText.textContent = message;
+      loadingText.style.color = '#f56c6c';
+      loadingOverlay.style.backgroundColor = 'rgba(255, 245, 245, 0.9)';
+      loadingOverlay.style.display = 'flex';
+    }
+    
+    // 页面加载完成后执行
+    document.addEventListener('DOMContentLoaded', () => {
+      // 监听控制栏WebView加载完成
+      controlWebview.addEventListener('dom-ready', () => {
+        console.log('控制栏加载完成');
+      });
+      
+      // 监听控制栏WebView加载失败
+      controlWebview.addEventListener('did-fail-load', (event) => {
+        console.error('控制栏加载失败:', event);
+      });
+      
+      // 监听NAS WebView加载完成
+      nasWebview.addEventListener('dom-ready', () => {
+        console.log('NAS页面加载完成');
+        hideLoading();
+      });
+      
+      // 监听NAS WebView加载失败
+      nasWebview.addEventListener('did-fail-load', (event) => {
+        console.error('NAS页面加载失败:', event);
+        showError(`NAS页面加载失败: ${event.errorDescription || '未知错误'}`);
+      });
+      
+      // 从主进程获取配置
+      if (window.electronAPI) {
+        window.electronAPI.getConfig();
+        window.electronAPI.onConfigLoaded((config) => {
+          console.log('获取到配置:', config);
+          if (config && config.nasUrl) {
+            loadNasPage(config.nasUrl);
+          } else {
+            showError('NAS地址未配置，请先完成配置');
+          }
+        });
+        
+        // 监听刷新NAS页面事件
+        window.electronAPI.onRefreshNasWebview(() => {
+          if (nasWebview.src && nasWebview.src !== 'about:blank') {
+            showLoading('正在刷新页面...');
+            nasWebview.reload();
+          }
+        });
+      } else {
+        showError('无法访问Electron API，请检查应用程序配置');
+      }
+    });
+  </script>
+</body>
+</html>

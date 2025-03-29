@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NAS迅雷客户端</title>
+  <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline' 'unsafe-eval';">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-plus@2.3.12/dist/index.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    
+    html, body {
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+      background-color: #f5f7fa;
+    }
+    
+    #app {
+      height: 100vh;
+      width: 100vw;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .app-header {
+      height: 60px;
+      background-color: #409eff;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    
+    .app-title {
+      font-size: 20px;
+      font-weight: bold;
+    }
+    
+    .app-content {
+      flex: 1;
+      padding: 20px;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      overflow: auto;
+    }
+    
+    .config-card {
+      width: 100%;
+      max-width: 700px;
+      background-color: white;
+      border-radius: 8px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      padding: 30px;
+    }
+    
+    .config-title {
+      font-size: 24px;
+      margin-bottom: 30px;
+      color: #303133;
+      text-align: center;
+    }
+    
+    .form-group {
+      margin-bottom: 20px;
+    }
+    
+    .form-label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 500;
+      color: #606266;
+    }
+    
+    .form-input {
+      width: 100%;
+      padding: 10px 15px;
+      border: 1px solid #dcdfe6;
+      border-radius: 4px;
+      font-size: 14px;
+      transition: all 0.3s;
+    }
+    
+    .form-input:focus {
+      border-color: #409eff;
+      outline: none;
+      box-shadow: 0 0 0 2px rgba(64, 158, 255, 0.2);
+    }
+    
+    .form-input-group {
+      display: flex;
+      align-items: center;
+    }
+    
+    .form-input-group .form-input {
+      flex: 1;
+      border-top-right-radius: 0;
+      border-bottom-right-radius: 0;
+    }
+    
+    .form-input-group .btn {
+      border-top-left-radius: 0;
+      border-bottom-left-radius: 0;
+    }
+    
+    .form-checkbox {
+      display: flex;
+      align-items: center;
+    }
+    
+    .form-checkbox input {
+      margin-right: 8px;
+    }
+    
+    .btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.3s;
+      font-weight: 500;
+    }
+    
+    .btn-primary {
+      background-color: #409eff;
+      color: white;
+    }
+    
+    .btn-primary:hover {
+      background-color: #66b1ff;
+    }
+    
+    .btn-success {
+      background-color: #67c23a;
+      color: white;
+    }
+    
+    .btn-success:hover {
+      background-color: #85ce61;
+    }
+    
+    .btn-group {
+      display: flex;
+      justify-content: center;
+      gap: 15px;
+      margin-top: 30px;
+    }
+    
+    .status-message {
+      margin-top: 15px;
+      padding: 10px;
+      border-radius: 4px;
+      text-align: center;
+    }
+    
+    .status-success {
+      background-color: #f0f9eb;
+      color: #67c23a;
+      border: 1px solid #e1f3d8;
+    }
+    
+    .status-error {
+      background-color: #fef0f0;
+      color: #f56c6c;
+      border: 1px solid #fde2e2;
+    }
+    
+    .status-warning {
+      background-color: #fdf6ec;
+      color: #e6a23c;
+      border: 1px solid #faecd8;
+    }
+    
+    .status-info {
+      background-color: #f4f4f5;
+      color: #909399;
+      border: 1px solid #e9e9eb;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <!-- 应用将在这里加载 -->
+  </div>
+  
+  <script>
+    // 初始化应用
+    window.addEventListener('DOMContentLoaded', () => {
+      const app = document.getElementById('app');
+      
+      // 创建应用界面
+      app.innerHTML = `
+        <div class="app-header">
+          <div class="app-title">群辉NAS迅雷客户端</div>
+          <div class="app-version">v1.0.0</div>
+        </div>
+        <div class="app-content">
+          <div class="config-card">
+            <h2 class="config-title">配置NAS连接</h2>
+            <div id="status-message" style="display: none;"></div>
+            
+            <div class="form-group">
+              <label class="form-label">NAS地址</label>
+              <div class="form-input-group">
+                <input id="nas-url" type="text" class="form-input" placeholder="例如: http://192.168.1.100:5000">
+                <button id="test-btn" class="btn btn-success">测试连接</button>
+              </div>
+            </div>
+            
+            <div class="form-group">
+              <label class="form-label">下载目录路径</label>
+              <div class="form-input-group">
+                <input id="download-path" type="text" class="form-input" placeholder="选择本地下载目录" readonly>
+                <button id="select-folder-btn" class="btn btn-primary">选择文件夹</button>
+              </div>
+            </div>
+            
+            <div class="form-group">
+              <label class="form-label">用户名</label>
+              <input id="username" type="text" class="form-input" placeholder="NAS登录用户名">
+            </div>
+            
+            <div class="form-group">
+              <label class="form-label">密码</label>
+              <input id="password" type="password" class="form-input" placeholder="NAS登录密码">
+            </div>
+            
+            <div class="form-group">
+              <div class="form-checkbox">
+                <input id="auto-open" type="checkbox" checked>
+                <label for="auto-open">自动打开客户端（当点击迅雷/BT下载链接时）</label>
+              </div>
+            </div>
+            
+            <div class="btn-group">
+              <button id="save-btn" class="btn btn-primary">保存配置</button>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      // 获取DOM元素
+      const nasUrlInput = document.getElementById('nas-url');
+      const downloadPathInput = document.getElementById('download-path');
+      const usernameInput = document.getElementById('username');
+      const passwordInput = document.getElementById('password');
+      const autoOpenCheckbox = document.getElementById('auto-open');
+      const testBtn = document.getElementById('test-btn');
+      const selectFolderBtn = document.getElementById('select-folder-btn');
+      const saveBtn = document.getElementById('save-btn');
+      const statusMessage = document.getElementById('status-message');
+      
+      // 显示状态消息
+      function showStatus(message, type = 'info') {
+        statusMessage.textContent = message;
+        statusMessage.className = `status-message status-${type}`;
+        statusMessage.style.display = 'block';
+        
+        // 3秒后自动隐藏
+        setTimeout(() => {
+          statusMessage.style.display = 'none';
+        }, 3000);
+      }
+      
+      // 测试连接按钮点击事件
+      testBtn.addEventListener('click', () => {
+        const nasUrl = nasUrlInput.value.trim();
+        if (!nasUrl) {
+          showStatus('请输入NAS地址', 'error');
+          return;
+        }
+        
+        showStatus('正在测试连接...', 'info');
+        
+        // 使用Electron API测试连接
+        if (window.electronAPI) {
+          window.electronAPI.testConnection(nasUrl);
+        } else {
+          console.log('测试连接:', nasUrl);
+          showStatus('开发模式：连接测试已记录到控制台', 'info');
+        }
+      });
+      
+      // 选择文件夹按钮点击事件
+      selectFolderBtn.addEventListener('click', () => {
+        if (window.electronAPI) {
+          window.electronAPI.selectFolder();
+        } else {
+          console.log('选择文件夹');
+          showStatus('开发模式：无法选择文件夹', 'warning');
+        }
+      });
+      
+      // 保存配置按钮点击事件
+      saveBtn.addEventListener('click', () => {
+        const nasUrl = nasUrlInput.value.trim();
+        const downloadPath = downloadPathInput.value.trim();
+        const username = usernameInput.value.trim();
+        const password = passwordInput.value.trim();
+        
+        if (!nasUrl) {
+          showStatus('请输入NAS地址', 'error');
+          return;
+        }
+        
+        if (!downloadPath) {
+          showStatus('请选择下载目录路径', 'error');
+          return;
+        }
+        
+        if (!username || !password) {
+          showStatus('请输入用户名和密码', 'error');
+          return;
+        }
+        
+        const config = {
+          nasUrl,
+          downloadPath,
+          username,
+          password,
+          autoOpen: autoOpenCheckbox.checked
+        };
+        
+        // 使用Electron API保存配置
+        if (window.electronAPI) {
+          window.electronAPI.saveConfig(config);
+          showStatus('配置已保存', 'success');
+          
+          // 延迟1秒后跳转到主界面
+          setTimeout(() => {
+            window.electronAPI.showMainView();
+          }, 1000);
+        } else {
+          console.log('保存配置:', config);
+          showStatus('开发模式：配置已记录到控制台', 'info');
+        }
+      });
+      
+      // 监听Electron API事件
+      if (window.electronAPI) {
+        // 监听连接测试结果
+        window.electronAPI.onConnectionTestResult((result) => {
+          if (result.success) {
+            showStatus(`连接成功！状态码: ${result.status}`, 'success');
+          } else {
+            showStatus(`连接失败: ${result.error || '未知错误'}`, 'error');
+          }
+        });
+        
+        // 监听文件夹选择结果
+        window.electronAPI.onFolderSelected((path) => {
+          if (path) {
+            downloadPathInput.value = path;
+          }
+        });
+        
+        // 加载已保存的配置
+        window.electronAPI.getConfig();
+        window.electronAPI.onConfigLoaded((config) => {
+          nasUrlInput.value = config.nasUrl || '';
+          downloadPathInput.value = config.downloadPath || '';
+          usernameInput.value = config.username || '';
+          passwordInput.value = config.password || '';
+          autoOpenCheckbox.checked = config.autoOpen !== false;
+        });
+        
+        // 获取应用版本
+        window.electronAPI.getAppVersion().then(version => {
+          document.querySelector('.app-version').textContent = `v${version}`;
+        }).catch(err => {
+          console.error('获取版本失败:', err);
+        });
+      }
+    });
+  </script>
+</body>
+</html>

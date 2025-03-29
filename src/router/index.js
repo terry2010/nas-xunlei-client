@@ -3,12 +3,12 @@ import { createRouter, createWebHashHistory } from 'vue-router'
 const routes = [
   {
     path: '/',
-    name: 'Main',
+    name: 'main',
     component: () => import('../views/MainView.vue')
   },
   {
     path: '/config',
-    name: 'Config',
+    name: 'config',
     component: () => import('../views/ConfigView.vue')
   }
 ]
