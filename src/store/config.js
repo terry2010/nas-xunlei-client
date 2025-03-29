@@ -28,16 +28,5 @@ export const useConfigStore = defineStore('config', {
       this.password = ''
       this.isConfigured = false
     }
-  },
-  
-  persist: {
-    enabled: true,
-    strategies: [
-      {
-        key: 'nas-xunlei-config',
-        storage: localStorage,
-        paths: ['nasUrl', 'downloadPath', 'autoOpenClient', 'username', 'isConfigured']
-      }
-    ]
   }
 })

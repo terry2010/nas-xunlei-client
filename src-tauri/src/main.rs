@@ -15,6 +15,7 @@ fn main() {
       test_nas_connection,
       save_config,
       load_config,
+      check_config_exists,
       open_download_directory,
       handle_download_link
     ])

@@ -66,7 +66,8 @@ import { useConfigStore } from '../store/config'
 import { ElMessage } from 'element-plus'
 
 // 导入Tauri API
-import { invoke, dialog } from '@tauri-apps/api'
+import { invoke } from '@tauri-apps/api'
+import { open } from '@tauri-apps/api/dialog'
 
 const router = useRouter()
 const configStore = useConfigStore()
@@ -111,14 +112,17 @@ const testConnection = async () => {
   
   testing.value = true
   try {
+    console.log("测试NAS连接:", form.nasUrl)
     // 使用Tauri API测试连接
     const result = await invoke('test_nas_connection', { url: form.nasUrl })
+    console.log("连接测试结果:", result)
     if (result) {
       ElMessage.success('连接成功')
     } else {
       ElMessage.error('连接失败')
     }
   } catch (error) {
+    console.error("连接测试失败:", error)
     ElMessage.error(`连接测试失败: ${error}`)
   } finally {
     testing.value = false
@@ -128,17 +132,20 @@ const testConnection = async () => {
 // 浏览网络路径
 const browsePath = async () => {
   try {
+    console.log("打开文件对话框选择下载目录")
     // 使用Tauri API打开文件对话框
-    const selected = await dialog.open({
+    const selected = await open({
       directory: true,
       multiple: false,
       title: '选择下载目录'
     })
     
+    console.log("选择的目录:", selected)
     if (selected) {
       form.downloadPath = selected
     }
   } catch (error) {
+    console.error("选择目录失败:", error)
     ElMessage.error(`选择目录失败: ${error}`)
   }
 }
@@ -151,17 +158,19 @@ const saveConfig = async () => {
     if (valid) {
       saving.value = true
       try {
-        // 使用Tauri API保存配置到安全存储
+        console.log("保存配置:", form)
+        // 使用Tauri API保存配置到config.json文件
         await invoke('save_config', {
           config: {
-            nasUrl: form.nasUrl,
-            downloadPath: form.downloadPath,
-            autoOpenClient: form.autoOpenClient,
+            nas_url: form.nasUrl,
+            download_path: form.downloadPath,
+            auto_open_client: form.autoOpenClient,
             username: form.username,
             password: form.password
           }
         })
         
+        console.log("配置保存成功，更新Pinia存储")
         // 更新Pinia存储
         configStore.setConfig({
           nasUrl: form.nasUrl,
@@ -174,11 +183,13 @@ const saveConfig = async () => {
         ElMessage.success('配置保存成功')
         router.push('/')
       } catch (error) {
+        console.error("配置保存失败:", error)
         ElMessage.error(`配置保存失败: ${error}`)
       } finally {
         saving.value = false
       }
     } else {
+      console.warn("表单验证失败")
       ElMessage.warning('请完成所有必填项')
     }
   })
@@ -186,30 +197,79 @@ const saveConfig = async () => {
 
 // 取消配置
 const cancel = () => {
-  router.push('/')
+  // 如果已经有配置，则返回主页面
+  if (configStore.isConfigured) {
+    console.log("取消配置，返回主页面")
+    router.push('/')
+  } else {
+    // 如果没有配置，显示提示
+    console.warn("首次使用需要完成配置")
+    ElMessage.warning('首次使用需要完成配置')
+  }
 }
 
-onMounted(() => {
-  // 如果已有配置，则加载到表单
-  if (configStore.isConfigured) {
-    form.nasUrl = configStore.nasUrl
-    form.downloadPath = configStore.downloadPath
-    form.autoOpenClient = configStore.autoOpenClient
-    form.username = configStore.username
-    // 密码不从本地存储加载，需要用户重新输入
+// 加载已有配置
+const loadConfig = async () => {
+  try {
+    console.log("检查配置文件是否存在")
+    // 检查配置文件是否存在
+    const exists = await invoke('check_config_exists')
+    console.log("配置文件存在:", exists)
+    
+    if (exists) {
+      // 从config.json加载配置
+      console.log("从config.json加载配置")
+      const config = await invoke('load_config')
+      console.log("加载的配置:", config)
+      
+      if (config) {
+        // 将配置加载到表单
+        form.nasUrl = config.nas_url
+        form.downloadPath = config.download_path
+        form.autoOpenClient = config.auto_open_client
+        form.username = config.username
+        form.password = config.password
+        
+        // 更新Pinia存储
+        configStore.setConfig({
+          nasUrl: config.nas_url,
+          downloadPath: config.download_path,
+          autoOpenClient: config.auto_open_client,
+          username: config.username,
+          password: config.password
+        })
+        
+        console.log("配置加载成功")
+      }
+    } else {
+      console.log("配置文件不存在，使用默认值")
+    }
+  } catch (error) {
+    console.error("加载配置失败:", error)
+    ElMessage.error(`加载配置失败: ${error}`)
   }
+}
+
+onMounted(async () => {
+  // 组件挂载时加载配置
+  console.log("ConfigView组件已挂载，加载配置...")
+  await loadConfig()
 })
 </script>
 
 <style scoped>
 .config-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
   padding: 20px;
-  max-width: 800px;
-  margin: 0 auto;
+  background-color: #f5f7fa;
 }
 
 .config-card {
-  margin-bottom: 20px;
+  width: 100%;
+  max-width: 600px;
 }
 
 .card-header {
@@ -222,9 +282,5 @@ onMounted(() => {
   margin-left: 10px;
   color: #909399;
   font-size: 12px;
-}
-
-.el-divider {
-  margin: 24px 0;
 }
 </style>
