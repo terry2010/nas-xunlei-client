@@ -6,72 +6,63 @@
   <title>NAS迅雷客户端</title>
   <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';">
   <style>
-    * {
+    body, html {
       margin: 0;
       padding: 0;
-      box-sizing: border-box;
+      height: 100%;
       font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
     }
     
-    html, body {
-      height: 100%;
-      width: 100%;
-      overflow: hidden;
-    }
-    
     #app {
-      height: 100vh;
-      width: 100vw;
       display: flex;
       flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
     }
     
     .webview-container {
       display: flex;
       flex-direction: column;
-      height: 100%;
-      width: 100%;
+      flex: 1;
+      position: relative;
     }
     
     #control-webview {
       height: 60px;
-      width: 100%;
-      border: none;
+      min-height: 60px;
+      border-bottom: 1px solid #e0e0e0;
+      background-color: #f5f7fa;
+      z-index: 10;
     }
     
     #nas-webview {
       flex: 1;
-      width: 100%;
       border: none;
+      z-index: 5;
     }
     
     .loading-overlay {
       position: absolute;
-      top: 0;
+      top: 60px;
       left: 0;
-      width: 100%;
-      height: 100%;
+      right: 0;
+      bottom: 0;
       background-color: rgba(255, 255, 255, 0.8);
-      display: flex;
+      display: none;
       flex-direction: column;
       justify-content: center;
       align-items: center;
-      z-index: 1000;
+      z-index: 100;
     }
     
     .loading-spinner {
-      border: 5px solid #f3f3f3;
-      border-top: 5px solid #409eff;
+      width: 40px;
+      height: 40px;
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #409eff;
       border-radius: 50%;
-      width: 50px;
-      height: 50px;
       animation: spin 1s linear infinite;
       margin-bottom: 20px;
-    }
-    
-    .loading-text {
-      font-size: 18px;
-      color: #409eff;
     }
     
     @keyframes spin {
@@ -79,10 +70,9 @@
       100% { transform: rotate(360deg); }
     }
     
-    .error-container {
-      padding: 20px;
-      text-align: center;
-      color: #f56c6c;
+    #loading-text {
+      font-size: 16px;
+      color: #409eff;
     }
   </style>
 </head>
@@ -90,11 +80,11 @@
   <div id="app">
     <div class="webview-container">
       <webview id="control-webview" src="control-bar.html" preload="../src-electron/preload.js"></webview>
-      <webview id="nas-webview" src="about:blank" preload="../src-electron/preload.js"></webview>
-    </div>
-    <div id="loading-overlay" class="loading-overlay">
-      <div class="loading-spinner"></div>
-      <div id="loading-text" class="loading-text">正在加载NAS页面...</div>
+      <webview id="nas-webview" src="about:blank" preload="../src-electron/preload.js" contextmenu></webview>
+      <div id="loading-overlay" class="loading-overlay">
+        <div class="loading-spinner"></div>
+        <div id="loading-text" class="loading-text">正在加载NAS页面...</div>
+      </div>
     </div>
   </div>
 
@@ -128,7 +118,6 @@
     function showLoading(message) {
       loadingText.textContent = message;
       loadingText.style.color = '#409eff';
-      loadingOverlay.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
       loadingOverlay.style.display = 'flex';
     }
     
@@ -141,8 +130,275 @@
     function showError(message) {
       loadingText.textContent = message;
       loadingText.style.color = '#f56c6c';
-      loadingOverlay.style.backgroundColor = 'rgba(255, 245, 245, 0.9)';
       loadingOverlay.style.display = 'flex';
+    }
+    
+    // 注入自动登录脚本
+    function injectAutoLoginScript(config) {
+      if (!config || !config.username || !config.password) {
+        console.log('未配置登录信息，跳过自动登录');
+        return;
+      }
+      
+      console.log('准备注入自动登录脚本');
+      
+      // 显示手工登录按钮
+      if (window.electronAPI) {
+        // 通知控制栏显示手工登录按钮
+        window.electronAPI.getAutoLoginStatus();
+        window.electronAPI.onAutoLoginStatus((status) => {
+          if (status) {
+            // 通知控制栏 WebView 显示手工登录按钮
+            controlWebview.executeJavaScript(`
+              document.getElementById('manual-login-btn').style.display = 'inline-block';
+              document.getElementById('status-text').textContent = '正在自动登录...';
+            `);
+          }
+        });
+      }
+      
+      // 注入自动登录脚本
+      nasWebview.executeJavaScript(`
+        // 全局变量，控制是否继续自动登录
+        window.autoLoginEnabled = true;
+        
+        // 接收停止自动登录的消息
+        window.addEventListener('stop-auto-login', function() {
+          console.log('收到停止自动登录消息');
+          window.autoLoginEnabled = false;
+        });
+        
+        // 自动登录函数
+        function autoLogin() {
+          // 如果已禁用自动登录，则直接返回
+          if (!window.autoLoginEnabled) {
+            console.log('自动登录已禁用，跳过登录流程');
+            return false;
+          }
+          
+          console.log('检查是否在登录页面...');
+          
+          // 检查是否有登录错误信息
+          const errorMsgBox = document.querySelector('.login-msg-box.error');
+          if (errorMsgBox && errorMsgBox.style.display !== 'none' && errorMsgBox.textContent.trim()) {
+            console.log('检测到登录失败:', errorMsgBox.textContent.trim());
+            // 发送登录失败事件
+            const loginFailedEvent = new CustomEvent('login-failed', { 
+              detail: { message: errorMsgBox.textContent.trim() } 
+            });
+            window.dispatchEvent(loginFailedEvent);
+            
+            // 停止自动登录
+            window.autoLoginEnabled = false;
+            return Promise.resolve(false);
+          }
+          
+          // 通知主进程自动登录已开始
+          const autoLoginStartedEvent = new CustomEvent('auto-login-started');
+          window.dispatchEvent(autoLoginStartedEvent);
+          
+          // 第一步：检查用户名输入页面
+          const usernameInput = document.querySelector('input[syno-id="username"]');
+          const usernameNextBtn = document.querySelector('div[syno-id="account-panel-next-btn"]');
+          
+          if (usernameInput && usernameNextBtn) {
+            console.log('检测到用户名输入页面，自动填写用户名');
+            
+            // 填写用户名
+            usernameInput.value = ${JSON.stringify(config.username)};
+            
+            // 触发输入事件
+            usernameInput.dispatchEvent(new Event('input', { bubbles: true }));
+            
+            console.log('等待2秒后点击下一步按钮...');
+            
+            // 使用 Promise 和 setTimeout 确保等待时间
+            return new Promise(resolve => {
+              setTimeout(() => {
+                // 如果已禁用自动登录，则直接返回
+                if (!window.autoLoginEnabled) {
+                  console.log('自动登录已禁用，停止用户名提交');
+                  resolve(false);
+                  return;
+                }
+                
+                // 移除 disable 类
+                usernameNextBtn.classList.remove('disable');
+                
+                // 模拟点击下一步按钮
+                usernameNextBtn.click();
+                console.log('已点击用户名下一步按钮，等待2秒后检查密码输入页面');
+                
+                // 等待第二步页面加载
+                setTimeout(() => {
+                  checkPasswordStep().then(resolve);
+                }, 2000);
+              }, 2000);
+            });
+          }
+          
+          // 第二步：检查密码输入页面
+          return checkPasswordStep();
+        }
+        
+        // 检查密码输入步骤
+        function checkPasswordStep() {
+          // 如果已禁用自动登录，则直接返回
+          if (!window.autoLoginEnabled) {
+            console.log('自动登录已禁用，跳过密码输入');
+            return Promise.resolve(false);
+          }
+          
+          const passwordInput = document.querySelector('input[syno-id="password"]');
+          const keepLoginCheckbox = document.querySelector('.login-checkbox');
+          const loginBtn = document.querySelector('div[syno-id="password-panel-next-btn"]');
+          
+          if (passwordInput && loginBtn) {
+            console.log('检测到密码输入页面，自动填写密码');
+            
+            // 填写密码
+            passwordInput.value = ${JSON.stringify(config.password)};
+            
+            // 触发输入事件
+            passwordInput.dispatchEvent(new Event('input', { bubbles: true }));
+            
+            // 确保"保持登录"选项被选中
+            if (keepLoginCheckbox) {
+              // 检查是否已经选中
+              const isChecked = keepLoginCheckbox.classList.contains('checked');
+              const checkboxInput = keepLoginCheckbox.querySelector('input[type="checkbox"]');
+              
+              if (!isChecked && checkboxInput) {
+                console.log('选中"保持登录"选项');
+                // 直接点击复选框
+                checkboxInput.click();
+                // 或者添加 checked 类
+                keepLoginCheckbox.classList.add('checked');
+              }
+            }
+            
+            console.log('等待2秒后点击登录按钮...');
+            
+            // 使用 Promise 和 setTimeout 确保等待时间
+            return new Promise(resolve => {
+              setTimeout(() => {
+                // 如果已禁用自动登录，则直接返回
+                if (!window.autoLoginEnabled) {
+                  console.log('自动登录已禁用，停止密码提交');
+                  resolve(false);
+                  return;
+                }
+                
+                // 模拟点击登录按钮
+                loginBtn.click();
+                console.log('已点击登录按钮');
+                
+                // 设置一个定时器检查登录结果
+                setTimeout(() => {
+                  // 检查是否有登录错误信息
+                  const errorMsgBox = document.querySelector('.login-msg-box.error');
+                  if (errorMsgBox && errorMsgBox.style.display !== 'none' && errorMsgBox.textContent.trim()) {
+                    console.log('登录失败:', errorMsgBox.textContent.trim());
+                    // 发送登录失败事件
+                    const loginFailedEvent = new CustomEvent('login-failed', { 
+                      detail: { message: errorMsgBox.textContent.trim() } 
+                    });
+                    window.dispatchEvent(loginFailedEvent);
+                    
+                    // 停止自动登录
+                    window.autoLoginEnabled = false;
+                    resolve(false);
+                  } else {
+                    // 等待10秒后再次点击登录按钮
+                    console.log('等待10秒后再次点击登录按钮...');
+                    setTimeout(() => {
+                      if (window.autoLoginEnabled) {
+                        // 再次检查登录按钮是否存在
+                        const loginBtnAgain = document.querySelector('div[syno-id="password-panel-next-btn"]');
+                        if (loginBtnAgain) {
+                          console.log('再次点击登录按钮');
+                          loginBtnAgain.click();
+                          
+                          // 再次检查登录结果
+                          setTimeout(() => {
+                            const errorMsgBoxAgain = document.querySelector('.login-msg-box.error');
+                            if (errorMsgBoxAgain && errorMsgBoxAgain.style.display !== 'none' && errorMsgBoxAgain.textContent.trim()) {
+                              console.log('第二次登录失败:', errorMsgBoxAgain.textContent.trim());
+                              // 发送登录失败事件
+                              const loginFailedEventAgain = new CustomEvent('login-failed', { 
+                                detail: { message: errorMsgBoxAgain.textContent.trim() } 
+                              });
+                              window.dispatchEvent(loginFailedEventAgain);
+                              
+                              // 停止自动登录
+                              window.autoLoginEnabled = false;
+                              resolve(false);
+                            } else {
+                              // 登录成功或正在处理中
+                              finishLogin();
+                            }
+                          }, 3000);
+                        } else {
+                          // 登录按钮不存在，可能已经登录成功
+                          finishLogin();
+                        }
+                      } else {
+                        // 自动登录已被禁用
+                        resolve(false);
+                      }
+                    }, 10000); // 等待10秒再次点击
+                  }
+                }, 3000); // 延长检查时间到3秒，确保有足够时间检测登录结果
+                
+                // 登录完成的通用函数
+                function finishLogin() {
+                  // 发送消息通知登录完成
+                  const loginCompletedEvent = new CustomEvent('login-completed');
+                  window.dispatchEvent(loginCompletedEvent);
+                  
+                  // 通知主进程自动登录已完成
+                  const autoLoginCompletedEvent = new CustomEvent('auto-login-completed');
+                  window.dispatchEvent(autoLoginCompletedEvent);
+                  
+                  resolve(true);
+                }
+              }, 2000);
+            });
+          }
+          
+          return Promise.resolve(false);
+        }
+        
+        // 页面加载完成后尝试自动登录
+        if (document.readyState === 'complete') {
+          autoLogin();
+        } else {
+          window.addEventListener('load', autoLogin);
+        }
+        
+        // 监听页面变化，处理可能的登录页面变化
+        const observer = new MutationObserver(() => {
+          if (window.autoLoginEnabled) {
+            autoLogin();
+          }
+        });
+        
+        // 开始观察 document.body 的变化
+        if (document.body) {
+          observer.observe(document.body, {
+            childList: true,
+            subtree: true
+          });
+        } else {
+          // 如果 body 还不存在，等待它加载完成
+          window.addEventListener('DOMContentLoaded', () => {
+            observer.observe(document.body, {
+              childList: true,
+              subtree: true
+            });
+          });
+        }
+      `);
     }
     
     // 页面加载完成后执行
@@ -159,8 +415,63 @@
       
       // 监听NAS WebView加载完成
       nasWebview.addEventListener('dom-ready', () => {
+        console.log('NAS WebView DOM 已就绪');
+        
+        // 添加自动登录事件监听
+        nasWebview.executeJavaScript(`
+          // 监听自动登录开始事件
+          window.addEventListener('auto-login-started', function() {
+            console.log('自动登录开始');
+            window.electronAPI.notifyAutoLoginStarted();
+          });
+          
+          // 监听自动登录完成事件
+          window.addEventListener('auto-login-completed', function() {
+            console.log('自动登录完成');
+            window.electronAPI.notifyAutoLoginCompleted();
+          });
+          
+          // 监听登录完成事件
+          window.addEventListener('login-completed', function() {
+            console.log('登录完成');
+          });
+          
+          // 监听登录失败事件
+          window.addEventListener('login-failed', function(event) {
+            console.log('登录失败:', event.detail.message);
+            window.electronAPI.notifyLoginFailed(event.detail.message);
+          });
+        `);
+        
         console.log('NAS页面加载完成');
         hideLoading();
+        
+        // 从主进程获取配置，用于自动登录
+        if (window.electronAPI) {
+          window.electronAPI.getConfig().then(config => {
+            if (config && config.username && config.password) {
+              // 注入自动登录脚本
+              injectAutoLoginScript(config);
+            }
+          });
+          
+          // 监听停止自动登录事件
+          window.electronAPI.onAutoLoginStopped(() => {
+            console.log('收到停止自动登录事件');
+            // 向 NAS WebView 发送停止自动登录消息
+            nasWebview.executeJavaScript(`
+              window.autoLoginEnabled = false;
+              const event = new CustomEvent('stop-auto-login');
+              window.dispatchEvent(event);
+            `);
+            
+            // 隐藏手工登录按钮
+            controlWebview.executeJavaScript(`
+              document.getElementById('manual-login-btn').style.display = 'none';
+              document.getElementById('status-text').textContent = '已连接';
+            `);
+          });
+        }
       });
       
       // 监听NAS WebView加载失败
@@ -171,8 +482,7 @@
       
       // 从主进程获取配置
       if (window.electronAPI) {
-        window.electronAPI.getConfig();
-        window.electronAPI.onConfigLoaded((config) => {
+        window.electronAPI.getConfig().then(config => {
           console.log('获取到配置:', config);
           if (config && config.nasUrl) {
             loadNasPage(config.nasUrl);

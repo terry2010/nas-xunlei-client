@@ -6,8 +6,7 @@ const fs = require('fs');
 contextBridge.exposeInMainWorld('electronAPI', {
   // 配置相关
   saveConfig: (config) => ipcRenderer.send('save-config', config),
-  getConfig: () => ipcRenderer.send('get-config'),
-  onConfigLoaded: (callback) => ipcRenderer.on('config-loaded', (_, config) => callback(config)),
+  getConfig: () => ipcRenderer.invoke('get-config'),
   onConfigSaved: (callback) => ipcRenderer.on('config-saved', (_, result) => callback(result)),
   
   // 连接测试
@@ -30,6 +29,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Cookie 管理
   clearCookies: () => ipcRenderer.send('clear-cookies'),
   onCookiesCleared: (callback) => ipcRenderer.on('cookies-cleared', (_, success) => callback(success)),
+  
+  // 自动登录控制
+  stopAutoLogin: () => ipcRenderer.send('stop-auto-login'),
+  onAutoLoginStarted: (callback) => ipcRenderer.on('auto-login-started', () => callback()),
+  onAutoLoginStopped: (callback) => ipcRenderer.on('auto-login-stopped', () => callback()),
+  getAutoLoginStatus: () => ipcRenderer.send('get-auto-login-status'),
+  onAutoLoginStatus: (callback) => ipcRenderer.on('auto-login-status', (_, status) => callback(status)),
+  onAutoLoginStateChange: (callback) => {
+    ipcRenderer.on('auto-login-state-change', (event, state) => callback(state));
+    return () => ipcRenderer.removeListener('auto-login-state-change', callback);
+  },
+  notifyAutoLoginStarted: () => ipcRenderer.send('auto-login-started'),
+  notifyAutoLoginCompleted: () => ipcRenderer.send('auto-login-completed'),
+  notifyLoginFailed: (message) => ipcRenderer.send('login-failed', message),
+  onLoginFailed: (callback) => ipcRenderer.on('login-failed-notification', (_, message) => callback(message)),
   
   // 系统信息
   getPlatform: () => process.platform

@@ -364,13 +364,14 @@
         });
         
         // 加载已保存的配置
-        window.electronAPI.getConfig();
-        window.electronAPI.onConfigLoaded((config) => {
+        window.electronAPI.getConfig().then(config => {
           nasUrlInput.value = config.nasUrl || '';
           downloadPathInput.value = config.downloadPath || '';
           usernameInput.value = config.username || '';
           passwordInput.value = config.password || '';
           autoOpenCheckbox.checked = config.autoOpen !== false;
+        }).catch(err => {
+          console.error('加载配置失败:', err);
         });
         
         // 获取应用版本
