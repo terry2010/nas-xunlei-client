@@ -4,41 +4,37 @@
       <el-button type="primary" @click="openConfig">
         <el-icon><Setting /></el-icon> 配置
       </el-button>
-      <el-button @click="openNasWindow" v-if="!nasWindowOpened">
-        <el-icon><Link /></el-icon> 打开NAS
+      <el-button @click="goBack" :disabled="!canGoBack">
+        <el-icon><ArrowLeft /></el-icon> 后退
       </el-button>
-      <div class="url-display" v-if="configStore.nasUrl">
-        <span>{{ configStore.nasUrl }}</span>
+      <el-button @click="goForward" :disabled="!canGoForward">
+        <el-icon><ArrowRight /></el-icon> 前进
+      </el-button>
+      <el-button @click="refresh">
+        <el-icon><Refresh /></el-icon> 刷新
+      </el-button>
+      <div class="url-display" v-if="currentUrl">
+        <span>{{ currentUrl }}</span>
       </div>
     </div>
     
-    <div class="content-container" v-loading="loading">
+    <div class="webview-container" v-loading="loading">
       <div v-if="!configStore.isConfigured" class="no-config">
         <el-empty description="尚未配置NAS地址">
           <el-button type="primary" @click="openConfig">立即配置</el-button>
         </el-empty>
       </div>
-      <div v-else class="nas-info">
-        <el-result
-          icon="success"
-          title="NAS连接成功"
-          sub-title="请点击'打开NAS'按钮访问NAS界面"
-        >
-          <template #extra>
-            <el-button type="primary" @click="openNasWindow">打开NAS</el-button>
-          </template>
-        </el-result>
-      </div>
+      <div v-else class="webview-content" id="webview-container"></div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useConfigStore } from '../store/config'
 import { ElMessage } from 'element-plus'
-import { Setting, Link } from '@element-plus/icons-vue'
+import { Setting, ArrowLeft, ArrowRight, Refresh } from '@element-plus/icons-vue'
 
 // 使用全局的window.__TAURI__对象
 const invoke = window.__TAURI__ && window.__TAURI__.invoke
@@ -49,7 +45,9 @@ const configStore = useConfigStore()
 
 // 状态变量
 const loading = ref(true)
-const nasWindowOpened = ref(false)
+const currentUrl = ref('')
+const canGoBack = ref(false)
+const canGoForward = ref(false)
 
 // 检查配置是否存在
 const checkConfigExists = async () => {
@@ -101,12 +99,8 @@ const checkConfigExists = async () => {
           return
         }
         
-        loading.value = false
-        
-        // 如果配置了自动打开客户端，则自动打开NAS窗口
-        if (config.auto_open_client) {
-          openNasWindow()
-        }
+        // 加载NAS地址
+        loadNasPage(config.nas_url)
       } else {
         // 配置加载失败，跳转到配置页面
         console.log("配置加载失败，跳转到配置页面")
@@ -121,30 +115,85 @@ const checkConfigExists = async () => {
   }
 }
 
-// 打开NAS窗口
-const openNasWindow = async () => {
-  if (!configStore.nasUrl) {
-    ElMessage.warning('未配置NAS地址，请先进行配置')
+// 加载NAS页面
+const loadNasPage = async (url) => {
+  if (!url) {
+    console.error("URL为空，无法加载NAS页面")
     return
   }
   
   try {
-    console.log("正在打开NAS地址:", configStore.nasUrl)
+    console.log("开始加载NAS页面:", url)
+    currentUrl.value = url
+    loading.value = true
     
-    // 使用shell.open打开系统默认浏览器
-    if (tauri && tauri.shell) {
-      await tauri.shell.open(configStore.nasUrl)
-      nasWindowOpened.value = true
-      console.log("已在系统浏览器中打开NAS页面")
-    } else {
-      // 如果tauri.shell不可用，尝试使用window.open
-      window.open(configStore.nasUrl, '_blank')
-      nasWindowOpened.value = true
-      console.log("已在新窗口中打开NAS页面")
+    // 使用Rust命令加载NAS页面
+    await invoke('open_nas_page', { url })
+    
+    // 设置延时，等待页面加载完成
+    setTimeout(() => {
+      loading.value = false
+      console.log("NAS页面加载完成")
+    }, 2000)
+  } catch (error) {
+    console.error("加载NAS页面失败:", error)
+    ElMessage.error(`加载NAS页面失败: ${error}`)
+    loading.value = false
+  }
+}
+
+// 导航控制函数
+const goBack = async () => {
+  try {
+    if (canGoBack.value) {
+      loading.value = true
+      
+      // 使用history.back()
+      if (window.history && window.history.back) {
+        window.history.back()
+      }
+      
+      setTimeout(() => {
+        loading.value = false
+      }, 1000)
     }
   } catch (error) {
-    console.error("打开NAS页面失败:", error)
-    ElMessage.error(`打开NAS页面失败: ${error}`)
+    console.error("后退失败:", error)
+    loading.value = false
+  }
+}
+
+const goForward = async () => {
+  try {
+    if (canGoForward.value) {
+      loading.value = true
+      
+      // 使用history.forward()
+      if (window.history && window.history.forward) {
+        window.history.forward()
+      }
+      
+      setTimeout(() => {
+        loading.value = false
+      }, 1000)
+    }
+  } catch (error) {
+    console.error("前进失败:", error)
+    loading.value = false
+  }
+}
+
+const refresh = async () => {
+  try {
+    loading.value = true
+    
+    // 重新加载当前页面
+    if (currentUrl.value) {
+      await loadNasPage(currentUrl.value)
+    }
+  } catch (error) {
+    console.error("刷新失败:", error)
+    loading.value = false
   }
 }
 
@@ -153,10 +202,33 @@ const openConfig = () => {
   router.push('/config')
 }
 
+// 更新导航状态
+const updateNavigationState = () => {
+  // 简化处理，假设始终可以后退，不能前进
+  canGoBack.value = true
+  canGoForward.value = false
+}
+
+// 监听URL变化
+watch(currentUrl, (newUrl) => {
+  console.log('当前URL变化:', newUrl)
+  updateNavigationState()
+})
+
 onMounted(async () => {
   // 组件挂载时检查配置是否存在
   console.log("MainView组件已挂载，检查配置...")
   await checkConfigExists()
+  
+  // 监听window的popstate事件
+  window.addEventListener('popstate', () => {
+    updateNavigationState()
+  })
+})
+
+onUnmounted(() => {
+  // 移除事件监听
+  window.removeEventListener('popstate', () => {})
 })
 </script>
 
@@ -190,13 +262,10 @@ onMounted(async () => {
   font-size: 14px;
 }
 
-.content-container {
+.webview-container {
   flex: 1;
   position: relative;
   overflow: hidden;
-  display: flex;
-  justify-content: center;
-  align-items: center;
 }
 
 .no-config {
@@ -206,11 +275,9 @@ onMounted(async () => {
   height: 100%;
 }
 
-.nas-info {
+.webview-content {
   width: 100%;
   height: 100%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  background-color: #fff;
 }
 </style>

@@ -14,6 +14,14 @@ fn open_devtools(window: tauri::Window) {
     window.open_devtools();
 }
 
+// 添加打开NAS页面的命令
+#[tauri::command]
+fn open_nas_page(window: tauri::Window, url: String) -> Result<(), String> {
+    // 使用window的eval方法加载URL
+    window.eval(&format!("window.location.href = '{}'", url))
+        .map_err(|e| e.to_string())
+}
+
 fn main() {
   tauri::Builder::default()
     .invoke_handler(tauri::generate_handler![
@@ -24,7 +32,8 @@ fn main() {
       check_nas_connection_on_startup,
       open_download_directory,
       handle_download_link,
-      open_devtools
+      open_devtools,
+      open_nas_page
     ])
     .setup(|_app| {
       // 注册URL协议处理器
