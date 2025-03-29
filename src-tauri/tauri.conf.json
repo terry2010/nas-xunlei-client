@@ -69,7 +69,7 @@
       }
     },
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' http://* https://*; img-src 'self' http://* https://* data:; script-src 'self' 'unsafe-eval' 'unsafe-inline' http://* https://*; style-src 'self' 'unsafe-inline' http://* https://*; frame-src 'self' http://* https://*"
+      "csp": null
     },
     "updater": {
       "active": false
