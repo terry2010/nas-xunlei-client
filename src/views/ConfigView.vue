@@ -65,9 +65,9 @@ import { useRouter } from 'vue-router'
 import { useConfigStore } from '../store/config'
 import { ElMessage } from 'element-plus'
 
-// 导入Tauri API
-import { invoke } from '@tauri-apps/api'
-import { open } from '@tauri-apps/api/dialog'
+// 使用全局的window.__TAURI__对象
+const invoke = window.__TAURI__.invoke
+const dialog = window.__TAURI__.dialog
 
 const router = useRouter()
 const configStore = useConfigStore()
@@ -134,7 +134,7 @@ const browsePath = async () => {
   try {
     console.log("打开文件对话框选择下载目录")
     // 使用Tauri API打开文件对话框
-    const selected = await open({
+    const selected = await dialog.open({
       directory: true,
       multiple: false,
       title: '选择下载目录'

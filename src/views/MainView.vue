@@ -27,8 +27,8 @@ import { useConfigStore } from '../store/config'
 import { ElMessage } from 'element-plus'
 import { Setting } from '@element-plus/icons-vue'
 
-// 导入Tauri API
-import { invoke } from '@tauri-apps/api'
+// 使用全局的window.__TAURI__对象
+const invoke = window.__TAURI__.invoke
 
 const router = useRouter()
 const configStore = useConfigStore()
