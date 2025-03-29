@@ -1,13 +1,18 @@
-#![cfg_attr(
-  all(not(debug_assertions), target_os = "windows"),
-  windows_subsystem = "windows"
-)]
+// Prevents additional console window on Windows in release, DO NOT REMOVE!!
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod cmd;
 mod utils;
 
 use cmd::config::*;
 use cmd::fs::*;
+
+// 添加打开开发者工具的命令
+#[tauri::command]
+fn open_devtools(window: tauri::Window) {
+    #[cfg(debug_assertions)]
+    window.open_devtools();
+}
 
 fn main() {
   tauri::Builder::default()
@@ -16,8 +21,10 @@ fn main() {
       save_config,
       load_config,
       check_config_exists,
+      check_nas_connection_on_startup,
       open_download_directory,
-      handle_download_link
+      handle_download_link,
+      open_devtools
     ])
     .setup(|_app| {
       // 注册URL协议处理器

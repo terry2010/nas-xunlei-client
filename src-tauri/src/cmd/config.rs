@@ -16,6 +16,8 @@ pub struct Config {
     pub password: String,
     #[serde(default)]
     pub debug: bool,
+    #[serde(default)]
+    pub debug_open_console: bool,
 }
 
 /// 获取配置文件路径
@@ -136,7 +138,6 @@ pub fn test_nas_connection(url: String) -> Result<serde_json::Value> {
 /// 保存配置到config.json文件
 #[command]
 pub fn save_config(config: Config) -> Result<()> {
-    // 获取配置文件路径
     let config_path = get_config_path()?;
     
     // 确保目录存在
@@ -144,9 +145,9 @@ pub fn save_config(config: Config) -> Result<()> {
         fs::create_dir_all(parent)?;
     }
     
-    // 将配置序列化为JSON并保存到文件
-    let config_json = serde_json::to_string_pretty(&config)?;
-    fs::write(config_path, config_json)?;
+    // 将配置序列化为JSON并写入文件
+    let json = serde_json::to_string_pretty(&config)?;
+    fs::write(config_path, json)?;
     
     Ok(())
 }
@@ -156,14 +157,12 @@ pub fn save_config(config: Config) -> Result<()> {
 pub fn load_config() -> Result<Option<Config>> {
     let config_path = get_config_path()?;
     
-    // 检查配置文件是否存在
     if !config_path.exists() {
         return Ok(None);
     }
     
-    // 读取并解析配置文件
-    let config_json = fs::read_to_string(config_path)?;
-    let config: Config = serde_json::from_str(&config_json)?;
+    let json = fs::read_to_string(config_path)?;
+    let config = serde_json::from_str(&json)?;
     
     Ok(Some(config))
 }
@@ -173,4 +172,65 @@ pub fn load_config() -> Result<Option<Config>> {
 pub fn check_config_exists() -> Result<bool> {
     let config_path = get_config_path()?;
     Ok(config_path.exists())
+}
+
+/// 在应用启动时检查NAS连接
+#[command]
+pub fn check_nas_connection_on_startup() -> Result<bool> {
+    // 加载配置
+    let config = match load_config()? {
+        Some(config) => config,
+        None => return Ok(false), // 如果配置不存在，返回false
+    };
+    
+    let debug = config.debug;
+    let url = config.nas_url.clone();
+    
+    if debug {
+        println!("调试模式: 应用启动时检查NAS连接: {}", url);
+    }
+    
+    // 检测是否使用了代理
+    let proxy_env = std::env::var("HTTP_PROXY").or_else(|_| std::env::var("http_proxy"));
+    let https_proxy_env = std::env::var("HTTPS_PROXY").or_else(|_| std::env::var("https_proxy"));
+    let has_proxy = proxy_env.is_ok() || https_proxy_env.is_ok();
+    
+    if debug && has_proxy {
+        println!("调试模式: 检测到系统代理设置，可能会影响连接测试");
+    }
+    
+    // 创建HTTP客户端
+    let client = Client::builder()
+        .timeout(Duration::from_secs(5)) // 启动时使用较短的超时时间
+        .danger_accept_invalid_certs(true)
+        .build()?;
+    
+    if debug {
+        println!("调试模式: 已创建HTTP客户端用于启动检查");
+    }
+    
+    // 发送请求
+    let request = client.get(&url)
+        .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
+    
+    let response = request.send();
+    
+    match response {
+        Ok(res) => {
+            let success = res.status().is_success();
+            
+            if debug {
+                println!("调试模式: 启动检查NAS连接结果: {}", if success { "成功" } else { "失败" });
+            }
+            
+            Ok(success)
+        },
+        Err(err) => {
+            if debug {
+                println!("调试模式: 启动检查NAS连接失败: {:?}", err);
+            }
+            
+            Ok(false)
+        }
+    }
 }
