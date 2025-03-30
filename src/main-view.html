@@ -135,269 +135,157 @@
     
     // 注入自动登录脚本
     function injectAutoLoginScript(config) {
-      if (!config || !config.username || !config.password) {
-        console.log('未配置登录信息，跳过自动登录');
-        return;
-      }
+      console.log('注入自动登录脚本');
       
-      console.log('准备注入自动登录脚本');
-      
-      // 显示手工登录按钮
-      if (window.electronAPI) {
-        // 通知控制栏显示手工登录按钮
-        window.electronAPI.getAutoLoginStatus();
-        window.electronAPI.onAutoLoginStatus((status) => {
-          if (status) {
-            // 通知控制栏 WebView 显示手工登录按钮
-            controlWebview.executeJavaScript(`
-              document.getElementById('manual-login-btn').style.display = 'inline-block';
-              document.getElementById('status-text').textContent = '正在自动登录...';
-            `);
-          }
-        });
-      }
-      
-      // 注入自动登录脚本
       nasWebview.executeJavaScript(`
-        // 全局变量，控制是否继续自动登录
-        window.autoLoginEnabled = true;
-        
-        // 接收停止自动登录的消息
-        window.addEventListener('stop-auto-login', function() {
-          console.log('收到停止自动登录消息');
-          window.autoLoginEnabled = false;
-        });
-        
-        // 自动登录函数
-        function autoLogin() {
-          // 如果已禁用自动登录，则直接返回
-          if (!window.autoLoginEnabled) {
-            console.log('自动登录已禁用，跳过登录流程');
-            return false;
-          }
+        // 自动登录脚本
+        (function() {
+          // 全局变量
+          window.autoLoginEnabled = true;
+          window.autoLoginConfig = ${JSON.stringify(config)};
+          window.autoLoginAttempts = 0;
+          window.maxAutoLoginAttempts = 5;
           
-          console.log('检查是否在登录页面...');
-          
-          // 检查是否有登录错误信息
-          const errorMsgBox = document.querySelector('.login-msg-box.error');
-          if (errorMsgBox && errorMsgBox.style.display !== 'none' && errorMsgBox.textContent.trim()) {
-            console.log('检测到登录失败:', errorMsgBox.textContent.trim());
-            // 发送登录失败事件
-            const loginFailedEvent = new CustomEvent('login-failed', { 
-              detail: { message: errorMsgBox.textContent.trim() } 
-            });
-            window.dispatchEvent(loginFailedEvent);
+          // 检查登录状态函数
+          function checkLoginStatus() {
+            console.log('检查登录状态...');
+            let loginCheckResult = {
+              trayContainerFound: false,
+              userButtonFound: false,
+              loginFormFound: false,
+              desktopElementFound: false,
+              isLoggedIn: false,
+              timestamp: new Date().toISOString()
+            };
             
-            // 停止自动登录
-            window.autoLoginEnabled = false;
-            return Promise.resolve(false);
-          }
-          
-          // 通知主进程自动登录已开始
-          const autoLoginStartedEvent = new CustomEvent('auto-login-started');
-          window.dispatchEvent(autoLoginStartedEvent);
-          
-          // 第一步：检查用户名输入页面
-          const usernameInput = document.querySelector('input[syno-id="username"]');
-          const usernameNextBtn = document.querySelector('div[syno-id="account-panel-next-btn"]');
-          
-          if (usernameInput && usernameNextBtn) {
-            console.log('检测到用户名输入页面，自动填写用户名');
-            
-            // 填写用户名
-            usernameInput.value = ${JSON.stringify(config.username)};
-            
-            // 触发输入事件
-            usernameInput.dispatchEvent(new Event('input', { bubbles: true }));
-            
-            console.log('等待2秒后点击下一步按钮...');
-            
-            // 使用 Promise 和 setTimeout 确保等待时间
-            return new Promise(resolve => {
-              setTimeout(() => {
-                // 如果已禁用自动登录，则直接返回
-                if (!window.autoLoginEnabled) {
-                  console.log('自动登录已禁用，停止用户名提交');
-                  resolve(false);
-                  return;
-                }
-                
-                // 移除 disable 类
-                usernameNextBtn.classList.remove('disable');
-                
-                // 模拟点击下一步按钮
-                usernameNextBtn.click();
-                console.log('已点击用户名下一步按钮，等待2秒后检查密码输入页面');
-                
-                // 等待第二步页面加载
-                setTimeout(() => {
-                  checkPasswordStep().then(resolve);
-                }, 2000);
-              }, 2000);
-            });
-          }
-          
-          // 第二步：检查密码输入页面
-          return checkPasswordStep();
-        }
-        
-        // 检查密码输入步骤
-        function checkPasswordStep() {
-          // 如果已禁用自动登录，则直接返回
-          if (!window.autoLoginEnabled) {
-            console.log('自动登录已禁用，跳过密码输入');
-            return Promise.resolve(false);
-          }
-          
-          const passwordInput = document.querySelector('input[syno-id="password"]');
-          const keepLoginCheckbox = document.querySelector('.login-checkbox');
-          const loginBtn = document.querySelector('div[syno-id="password-panel-next-btn"]');
-          
-          if (passwordInput && loginBtn) {
-            console.log('检测到密码输入页面，自动填写密码');
-            
-            // 填写密码
-            passwordInput.value = ${JSON.stringify(config.password)};
-            
-            // 触发输入事件
-            passwordInput.dispatchEvent(new Event('input', { bubbles: true }));
-            
-            // 确保"保持登录"选项被选中
-            if (keepLoginCheckbox) {
-              // 检查是否已经选中
-              const isChecked = keepLoginCheckbox.classList.contains('checked');
-              const checkboxInput = keepLoginCheckbox.querySelector('input[type="checkbox"]');
+            // 检查顶部用户栏
+            const trayContainer = document.querySelector('.tray-container');
+            if (trayContainer) {
+              console.log('找到顶部工具栏容器');
+              loginCheckResult.trayContainerFound = true;
               
-              if (!isChecked && checkboxInput) {
-                console.log('选中"保持登录"选项');
-                // 直接点击复选框
-                checkboxInput.click();
-                // 或者添加 checked 类
-                keepLoginCheckbox.classList.add('checked');
+              // 检查用户按钮
+              const userButton = trayContainer.querySelector('button[syno-id="user"]');
+              if (userButton) {
+                console.log('找到用户按钮，判断为已登录');
+                loginCheckResult.userButtonFound = true;
+                loginCheckResult.isLoggedIn = true;
+                return loginCheckResult;
               }
             }
             
-            console.log('等待2秒后点击登录按钮...');
+            // 检查是否有任何桌面元素
+            const anyDesktopElement = document.querySelector('.desktop-container') || 
+                                    document.querySelector('.syno-ux-desktop') || 
+                                    document.querySelector('.syno-desktop');
             
-            // 使用 Promise 和 setTimeout 确保等待时间
-            return new Promise(resolve => {
-              setTimeout(() => {
-                // 如果已禁用自动登录，则直接返回
-                if (!window.autoLoginEnabled) {
-                  console.log('自动登录已禁用，停止密码提交');
-                  resolve(false);
-                  return;
-                }
-                
-                // 模拟点击登录按钮
-                loginBtn.click();
-                console.log('已点击登录按钮');
-                
-                // 设置一个定时器检查登录结果
-                setTimeout(() => {
-                  // 检查是否有登录错误信息
-                  const errorMsgBox = document.querySelector('.login-msg-box.error');
-                  if (errorMsgBox && errorMsgBox.style.display !== 'none' && errorMsgBox.textContent.trim()) {
-                    console.log('登录失败:', errorMsgBox.textContent.trim());
-                    // 发送登录失败事件
-                    const loginFailedEvent = new CustomEvent('login-failed', { 
-                      detail: { message: errorMsgBox.textContent.trim() } 
-                    });
-                    window.dispatchEvent(loginFailedEvent);
-                    
-                    // 停止自动登录
-                    window.autoLoginEnabled = false;
-                    resolve(false);
-                  } else {
-                    // 等待10秒后再次点击登录按钮
-                    console.log('等待10秒后再次点击登录按钮...');
-                    setTimeout(() => {
-                      if (window.autoLoginEnabled) {
-                        // 再次检查登录按钮是否存在
-                        const loginBtnAgain = document.querySelector('div[syno-id="password-panel-next-btn"]');
-                        if (loginBtnAgain) {
-                          console.log('再次点击登录按钮');
-                          loginBtnAgain.click();
-                          
-                          // 再次检查登录结果
-                          setTimeout(() => {
-                            const errorMsgBoxAgain = document.querySelector('.login-msg-box.error');
-                            if (errorMsgBoxAgain && errorMsgBoxAgain.style.display !== 'none' && errorMsgBoxAgain.textContent.trim()) {
-                              console.log('第二次登录失败:', errorMsgBoxAgain.textContent.trim());
-                              // 发送登录失败事件
-                              const loginFailedEventAgain = new CustomEvent('login-failed', { 
-                                detail: { message: errorMsgBoxAgain.textContent.trim() } 
-                              });
-                              window.dispatchEvent(loginFailedEventAgain);
-                              
-                              // 停止自动登录
-                              window.autoLoginEnabled = false;
-                              resolve(false);
-                            } else {
-                              // 登录成功或正在处理中
-                              finishLogin();
-                            }
-                          }, 3000);
-                        } else {
-                          // 登录按钮不存在，可能已经登录成功
-                          finishLogin();
-                        }
-                      } else {
-                        // 自动登录已被禁用
-                        resolve(false);
-                      }
-                    }, 10000); // 等待10秒再次点击
-                  }
-                }, 3000); // 延长检查时间到3秒，确保有足够时间检测登录结果
-                
-                // 登录完成的通用函数
-                function finishLogin() {
-                  // 发送消息通知登录完成
-                  const loginCompletedEvent = new CustomEvent('login-completed');
-                  window.dispatchEvent(loginCompletedEvent);
-                  
-                  // 通知主进程自动登录已完成
-                  const autoLoginCompletedEvent = new CustomEvent('auto-login-completed');
-                  window.dispatchEvent(autoLoginCompletedEvent);
-                  
-                  resolve(true);
-                }
-              }, 2000);
-            });
+            if (anyDesktopElement) {
+              console.log('找到桌面容器元素，判断为已登录');
+              loginCheckResult.desktopElementFound = true;
+              loginCheckResult.isLoggedIn = true;
+              return loginCheckResult;
+            }
+            
+            // 检查是否存在登录表单
+            const loginForm = document.querySelector('div[syno-id="login-form"]');
+            if (loginForm) {
+              console.log('找到登录表单，尚未登录');
+              loginCheckResult.loginFormFound = true;
+            }
+            
+            return loginCheckResult;
           }
           
-          return Promise.resolve(false);
-        }
-        
-        // 页面加载完成后尝试自动登录
-        if (document.readyState === 'complete') {
-          autoLogin();
-        } else {
-          window.addEventListener('load', autoLogin);
-        }
-        
-        // 监听页面变化，处理可能的登录页面变化
-        const observer = new MutationObserver(() => {
-          if (window.autoLoginEnabled) {
-            autoLogin();
+          // 自动登录函数
+          function autoLogin() {
+            if (!window.autoLoginEnabled) {
+              console.log('自动登录已禁用');
+              return;
+            }
+            
+            if (window.autoLoginAttempts >= window.maxAutoLoginAttempts) {
+              console.log('已达到最大自动登录尝试次数');
+              window.autoLoginEnabled = false;
+              return;
+            }
+            
+            window.autoLoginAttempts++;
+            
+            // 检查是否在登录页面
+            console.log('检查是否在登录页面...');
+            const loginCheckResult = checkLoginStatus();
+            console.log('登录状态检查结果:', JSON.stringify(loginCheckResult, null, 2));
+            
+            if (loginCheckResult.isLoggedIn) {
+              console.log('已经登录，无需自动登录');
+              // 通知登录完成
+              const loginCompletedEvent = new CustomEvent('login-completed');
+              window.dispatchEvent(loginCompletedEvent);
+              return;
+            }
+            
+            console.log('自动登录开始');
+            
+            // 检查用户名输入页面
+            const usernameInput = document.querySelector('input[name="username"]');
+            const nextButton = document.querySelector('button.login-btn');
+            
+            if (usernameInput && nextButton) {
+              console.log('检测到用户名输入页面');
+              
+              // 填写用户名
+              usernameInput.value = window.autoLoginConfig.username;
+              console.log('已填写用户名:', window.autoLoginConfig.username);
+              
+              // 触发输入事件
+              usernameInput.dispatchEvent(new Event('input', { bubbles: true }));
+              
+              // 等待2秒后点击下一步
+              setTimeout(() => {
+                console.log('点击下一步按钮');
+                nextButton.click();
+                
+                // 等待密码输入页面加载
+                setTimeout(checkPasswordPage, 2000);
+              }, 2000);
+              
+              return;
+            }
+            
+            // 检查密码输入页面
+            function checkPasswordPage() {
+              // 检查密码输入框
+              const passwordInput = document.querySelector('input[name="password"]');
+              const loginButton = document.querySelector('button.login-btn');
+              
+              if (passwordInput && loginButton) {
+                console.log('检测到密码输入页面');
+                
+                // 填写密码
+                passwordInput.value = window.autoLoginConfig.password;
+                console.log('已填写密码:', window.autoLoginConfig.password);
+                
+                // 触发输入事件
+                passwordInput.dispatchEvent(new Event('input', { bubbles: true }));
+                
+                // 等待2秒后点击登录
+                setTimeout(() => {
+                  console.log('点击登录按钮');
+                  loginButton.click();
+                }, 2000);
+                
+                return;
+              }
+            }
           }
-        });
-        
-        // 开始观察 document.body 的变化
-        if (document.body) {
-          observer.observe(document.body, {
-            childList: true,
-            subtree: true
-          });
-        } else {
-          // 如果 body 还不存在，等待它加载完成
-          window.addEventListener('DOMContentLoaded', () => {
-            observer.observe(document.body, {
-              childList: true,
-              subtree: true
-            });
-          });
-        }
+          
+          // 页面加载完成后尝试自动登录
+          if (document.readyState === 'complete') {
+            autoLogin();
+          } else {
+            window.addEventListener('load', autoLogin);
+          }
+        })();
       `);
     }
     
@@ -474,6 +362,26 @@
         }
       });
       
+      // 监听NAS WebView导航完成事件
+      nasWebview.addEventListener('did-navigate', () => {
+        console.log('页面导航完成，等待3秒后开始检查登录状态');
+        // 延迟3秒后检测，确保页面元素完全加载
+        setTimeout(() => {
+          console.log('导航完成后开始执行延迟检测');
+          checkLoginStatusWithRetry();
+        }, 3000);
+      });
+      
+      // 监听NAS WebView框架加载完成事件
+      nasWebview.addEventListener('did-frame-finish-load', () => {
+        console.log('页面框架加载完成，等待3秒后开始检查登录状态');
+        // 延迟3秒后检测，确保页面元素完全加载
+        setTimeout(() => {
+          console.log('框架加载完成后开始执行延迟检测');
+          checkLoginStatusWithRetry();
+        }, 3000);
+      });
+      
       // 监听NAS WebView加载失败
       nasWebview.addEventListener('did-fail-load', (event) => {
         console.error('NAS页面加载失败:', event);
@@ -500,6 +408,224 @@
         });
       } else {
         showError('无法访问Electron API，请检查应用程序配置');
+      }
+      
+      // 监听页面加载完成事件
+      nasWebview.addEventListener('did-finish-load', () => {
+        console.log('页面加载完成，等待3秒后开始检查登录状态');
+        
+        // 延迟3秒后检测，确保页面元素完全加载
+        setTimeout(() => {
+          console.log('开始执行延迟检测');
+          checkLoginStatusWithRetry();
+        }, 3000);
+      });
+      
+      // 带重试机制的登录状态检测
+      function checkLoginStatusWithRetry(retryCount = 0, maxRetries = 5) {
+        console.log(`执行第 ${retryCount + 1} 次登录状态检测`);
+        
+        // 在WebView内部执行检测脚本
+        nasWebview.executeJavaScript(`
+          // 检查顶部用户栏
+          (function checkLoginStatusInPage() {
+            console.log('在页面内部检查登录状态...');
+            
+            // 输出完整的DOM结构，帮助调试
+            console.log('当前页面顶部结构:', document.querySelector('header') ? document.querySelector('header').outerHTML : '无header元素');
+            console.log('当前页面工具栏结构:', document.querySelector('.tray-container') ? document.querySelector('.tray-container').outerHTML : '无tray-container元素');
+            console.log('当前页面桌面元素:', document.querySelector('.desktop-container') ? '有desktop-container' : '无desktop-container');
+            console.log('当前页面用户菜单:', document.querySelector('.user-menu') ? '有user-menu' : '无user-menu');
+            
+            let loginCheckResult = {
+              trayContainerFound: false,
+              userButtonFound: false,
+              loginFormFound: false,
+              desktopElementFound: false,
+              isLoggedIn: false,
+              timestamp: new Date().toISOString(),
+              retryCount: ${retryCount}
+            };
+            
+            try {
+              // 检查顶部工具栏
+              const trayContainer = document.querySelector('.tray-container');
+              if (trayContainer) {
+                console.log('页面内部：找到顶部工具栏容器');
+                loginCheckResult.trayContainerFound = true;
+                
+                // 检查用户按钮
+                const userButton = trayContainer.querySelector('button[syno-id="user"]');
+                if (userButton) {
+                  console.log('页面内部：找到用户按钮，判断为已登录');
+                  loginCheckResult.userButtonFound = true;
+                  loginCheckResult.isLoggedIn = true;
+                }
+              }
+              
+              // 检查是否有任何桌面元素
+              const anyDesktopElement = document.querySelector('.desktop-container') || 
+                                       document.querySelector('.syno-ux-desktop') || 
+                                       document.querySelector('.syno-desktop');
+              
+              if (anyDesktopElement) {
+                console.log('页面内部：找到桌面容器元素，判断为已登录');
+                loginCheckResult.desktopElementFound = true;
+                loginCheckResult.isLoggedIn = true;
+              }
+              
+              // 检查是否存在登录表单
+              const loginForm = document.querySelector('div[syno-id="login-form"]');
+              if (loginForm) {
+                console.log('页面内部：找到登录表单，尚未登录');
+                loginCheckResult.loginFormFound = true;
+              }
+              
+              // 检查任何可能表明已登录的元素
+              const userMenu = document.querySelector('.user-menu');
+              if (userMenu) {
+                console.log('页面内部：找到用户菜单，判断为已登录');
+                loginCheckResult.isLoggedIn = true;
+              }
+              
+              // 检查是否有任何应用图标，表明已进入桌面
+              const appIcons = document.querySelectorAll('.desktop-app-icon');
+              if (appIcons && appIcons.length > 0) {
+                console.log('页面内部：找到应用图标，判断为已登录');
+                loginCheckResult.isLoggedIn = true;
+              }
+            } catch (error) {
+              console.error('页面内部检测出错:', error);
+            }
+            
+            console.log('页面内部检查结果:', JSON.stringify(loginCheckResult, null, 2));
+            return loginCheckResult;
+          })();
+        `).then(result => {
+          console.log('页面内部检测结果:', JSON.stringify(result, null, 2));
+          if (result && result.isLoggedIn) {
+            console.log('内部检测确认已登录，准备跳转到迅雷下载页面');
+            // 延迟一秒再跳转，确保页面完全加载
+            setTimeout(() => {
+              redirectToXunlei();
+            }, 1000);
+          } else if (retryCount < maxRetries) {
+            // 如果未检测到登录状态且未达到最大重试次数，则延迟后重试
+            console.log(`未检测到登录状态，${3}秒后进行第 ${retryCount + 2} 次检测`);
+            setTimeout(() => {
+              checkLoginStatusWithRetry(retryCount + 1, maxRetries);
+            }, 3000);
+          } else {
+            console.log('达到最大重试次数，使用外部方法检测');
+            // 如果达到最大重试次数，则使用外部方法检测
+            checkLoginStatus();
+          }
+        }).catch(err => {
+          console.error('执行页面内部检测脚本失败:', err);
+          if (retryCount < maxRetries) {
+            // 如果检测失败且未达到最大重试次数，则延迟后重试
+            console.log(`检测失败，${3}秒后进行第 ${retryCount + 2} 次检测`);
+            setTimeout(() => {
+              checkLoginStatusWithRetry(retryCount + 1, maxRetries);
+            }, 3000);
+          } else {
+            // 如果达到最大重试次数，则使用外部方法检测
+            checkLoginStatus();
+          }
+        });
+      }
+      
+      // 检查登录状态
+      function checkLoginStatus() {
+        console.log('正在检查登录状态...');
+        let loginCheckResult = {
+          trayContainerFound: false,
+          userButtonFound: false,
+          loginFormFound: false,
+          desktopElementFound: false,
+          isLoggedIn: false,
+          timestamp: new Date().toISOString()
+        };
+        
+        // 检查顶部用户栏
+        const trayContainer = document.querySelector('.tray-container');
+        if (trayContainer) {
+          console.log('找到顶部工具栏容器');
+          loginCheckResult.trayContainerFound = true;
+          
+          // 检查用户按钮
+          const userButton = trayContainer.querySelector('button[syno-id="user"]');
+          if (userButton) {
+            console.log('找到用户按钮，判断为已登录');
+            loginCheckResult.userButtonFound = true;
+            loginCheckResult.isLoggedIn = true;
+            
+            // 延迟一秒再跳转，确保页面完全加载
+            setTimeout(() => {
+              redirectToXunlei();
+            }, 1000);
+            
+            // 输出检查结果
+            console.log('登录状态检查结果:', JSON.stringify(loginCheckResult, null, 2));
+            return;
+          }
+        }
+        
+        // 备用方法：检查是否存在登录表单
+        const loginForm = document.querySelector('div[syno-id="login-form"]');
+        if (loginForm) {
+          console.log('找到登录表单，尚未登录');
+          loginCheckResult.loginFormFound = true;
+        } else {
+          // 如果不存在登录表单，可能已经登录
+          console.log('未找到登录表单，可能已登录');
+          
+          // 检查是否有任何桌面元素
+          const anyDesktopElement = document.querySelector('.desktop-container') || 
+                                   document.querySelector('.syno-ux-desktop') || 
+                                   document.querySelector('.syno-desktop');
+          
+          if (anyDesktopElement) {
+            console.log('找到桌面容器元素，判断为已登录');
+            loginCheckResult.desktopElementFound = true;
+            loginCheckResult.isLoggedIn = true;
+            
+            // 延迟一秒再跳转，确保页面完全加载
+            setTimeout(() => {
+              redirectToXunlei();
+            }, 1000);
+            
+            // 输出检查结果
+            console.log('登录状态检查结果:', JSON.stringify(loginCheckResult, null, 2));
+            return;
+          }
+        }
+        
+        console.log('登录状态检查完成，未确认登录成功');
+        // 输出检查结果
+        console.log('登录状态检查结果:', JSON.stringify(loginCheckResult, null, 2));
+      }
+      
+      // 重定向到迅雷下载页面
+      function redirectToXunlei() {
+        // 获取配置的域名
+        window.electronAPI.getConfig().then(config => {
+          if (config.nasUrl) {
+            // 构建迅雷下载页面URL
+            const xunleiUrl = `${config.nasUrl}/webman/3rdparty/pan-xunlei-com/index.cgi/#/home`;
+            console.log('跳转到迅雷下载页面:', xunleiUrl);
+            
+            // 跳转到迅雷下载页面
+            window.location.href = xunleiUrl;
+            
+            // 通知主进程自动登录已完成
+            window.electronAPI.notifyAutoLoginCompleted();
+          } else {
+            console.error('未配置NAS地址，无法跳转到迅雷下载页面');
+          }
+        }).catch(err => {
+          console.error('获取配置失败:', err);
+        });
       }
     });
   </script>
