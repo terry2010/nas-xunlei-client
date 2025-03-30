@@ -289,6 +289,9 @@
       `);
     }
     
+    // 全局变量，用于标记是否已跳转到迅雷页面
+    let redirectedToXunlei = false;
+    
     // 页面加载完成后执行
     document.addEventListener('DOMContentLoaded', () => {
       // 监听控制栏WebView加载完成
@@ -365,8 +368,21 @@
       // 监听NAS WebView导航完成事件
       nasWebview.addEventListener('did-navigate', () => {
         console.log('页面导航完成，等待3秒后开始检查登录状态');
+        
+        // 如果已经跳转到迅雷页面，则不再检测登录状态
+        if (redirectedToXunlei) {
+          console.log('已跳转到迅雷页面，不再检测登录状态');
+          return;
+        }
+        
         // 延迟3秒后检测，确保页面元素完全加载
         setTimeout(() => {
+          // 如果已经跳转到迅雷页面，则不再检测登录状态
+          if (redirectedToXunlei) {
+            console.log('已跳转到迅雷页面，不再检测登录状态');
+            return;
+          }
+          
           console.log('导航完成后开始执行延迟检测');
           checkLoginStatusWithRetry();
         }, 3000);
@@ -375,8 +391,21 @@
       // 监听NAS WebView框架加载完成事件
       nasWebview.addEventListener('did-frame-finish-load', () => {
         console.log('页面框架加载完成，等待3秒后开始检查登录状态');
+        
+        // 如果已经跳转到迅雷页面，则不再检测登录状态
+        if (redirectedToXunlei) {
+          console.log('已跳转到迅雷页面，不再检测登录状态');
+          return;
+        }
+        
         // 延迟3秒后检测，确保页面元素完全加载
         setTimeout(() => {
+          // 如果已经跳转到迅雷页面，则不再检测登录状态
+          if (redirectedToXunlei) {
+            console.log('已跳转到迅雷页面，不再检测登录状态');
+            return;
+          }
+          
           console.log('框架加载完成后开始执行延迟检测');
           checkLoginStatusWithRetry();
         }, 3000);
@@ -414,8 +443,20 @@
       nasWebview.addEventListener('did-finish-load', () => {
         console.log('页面加载完成，等待3秒后开始检查登录状态');
         
+        // 如果已经跳转到迅雷页面，则不再检测登录状态
+        if (redirectedToXunlei) {
+          console.log('已跳转到迅雷页面，不再检测登录状态');
+          return;
+        }
+        
         // 延迟3秒后检测，确保页面元素完全加载
         setTimeout(() => {
+          // 如果已经跳转到迅雷页面，则不再检测登录状态
+          if (redirectedToXunlei) {
+            console.log('已跳转到迅雷页面，不再检测登录状态');
+            return;
+          }
+          
           console.log('开始执行延迟检测');
           checkLoginStatusWithRetry();
         }, 3000);
@@ -423,6 +464,12 @@
       
       // 带重试机制的登录状态检测
       function checkLoginStatusWithRetry(retryCount = 0, maxRetries = 5) {
+        // 如果已经跳转到迅雷页面，则不再检测登录状态
+        if (redirectedToXunlei) {
+          console.log('已跳转到迅雷页面，不再检测登录状态');
+          return;
+        }
+        
         console.log(`执行第 ${retryCount + 1} 次登录状态检测`);
         
         // 在WebView内部执行检测脚本
@@ -615,11 +662,14 @@
             const xunleiUrl = `${config.nasUrl}/webman/3rdparty/pan-xunlei-com/index.cgi/#/home`;
             console.log('跳转到迅雷下载页面:', xunleiUrl);
             
-            // 跳转到迅雷下载页面
-            window.location.href = xunleiUrl;
+            // 使用WebView加载迅雷下载页面，而不是整个窗口跳转
+            nasWebview.src = xunleiUrl;
             
             // 通知主进程自动登录已完成
             window.electronAPI.notifyAutoLoginCompleted();
+            
+            // 标记已跳转到迅雷页面
+            redirectedToXunlei = true;
           } else {
             console.error('未配置NAS地址，无法跳转到迅雷下载页面');
           }
