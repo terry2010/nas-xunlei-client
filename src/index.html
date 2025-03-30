@@ -242,6 +242,7 @@
             </div>
             
             <div class="btn-group">
+              <button id="cancel-btn" class="btn" style="background-color: #909399; color: white;">取消</button>
               <button id="save-btn" class="btn btn-primary">保存配置</button>
             </div>
           </div>
@@ -257,6 +258,7 @@
       const testBtn = document.getElementById('test-btn');
       const selectFolderBtn = document.getElementById('select-folder-btn');
       const saveBtn = document.getElementById('save-btn');
+      const cancelBtn = document.getElementById('cancel-btn');
       const statusMessage = document.getElementById('status-message');
       
       // 显示状态消息
@@ -298,6 +300,12 @@
           console.log('选择文件夹');
           showStatus('开发模式：无法选择文件夹', 'warning');
         }
+      });
+      
+      // 取消按钮点击事件
+      cancelBtn.addEventListener('click', () => {
+        // 返回到主界面
+        window.electronAPI.showMainView();
       });
       
       // 保存配置按钮点击事件
@@ -376,9 +384,16 @@
         
         // 获取应用版本
         window.electronAPI.getAppVersion().then(version => {
-          document.querySelector('.app-version').textContent = `v${version}`;
+          const versionElement = document.querySelector('.app-version');
+          if (versionElement) {
+            versionElement.textContent = `v${version}`;
+          }
         }).catch(err => {
           console.error('获取版本失败:', err);
+          const versionElement = document.querySelector('.app-version');
+          if (versionElement) {
+            versionElement.textContent = 'v1.0.0';
+          }
         });
       }
     });

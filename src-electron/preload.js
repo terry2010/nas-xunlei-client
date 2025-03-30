@@ -46,7 +46,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onLoginFailed: (callback) => ipcRenderer.on('login-failed-notification', (_, message) => callback(message)),
   
   // 系统信息
-  getPlatform: () => process.platform
+  getPlatform: () => process.platform,
+  
+  // 应用版本
+  getAppVersion: () => Promise.resolve('1.0.0')
 });
 
 // WebView 相关功能
