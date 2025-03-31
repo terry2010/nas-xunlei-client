@@ -311,7 +311,7 @@
       // 保存配置按钮点击事件
       saveBtn.addEventListener('click', () => {
         const nasUrl = nasUrlInput.value.trim();
-        const downloadPath = downloadPathInput.value.trim();
+        var downloadPath = downloadPathInput.value.trim();
         const username = usernameInput.value.trim();
         const password = passwordInput.value.trim();
         
@@ -321,8 +321,7 @@
         }
         
         if (!downloadPath) {
-          showStatus('请选择下载目录路径', 'error');
-          return;
+          downloadPath = "";
         }
         
         if (!username || !password) {
